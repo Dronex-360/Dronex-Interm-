@@ -282,22 +282,75 @@ table.t tfoot td{background:#0D2E18;font-weight:700;color:var(--greenM)}
 
 <script>
 // ══════════════════════════════════════════════════════
-// STATE
+// SUPABASE CONFIG
+// ══════════════════════════════════════════════════════
+const SUPA_URL = "https://prjxnvellmimqykktglb.supabase.co";
+const SUPA_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InByanhudmVsbG1pbXF5a2t0Z2xiIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4NTQ0MTcwNywiZXhwIjoyMTAxMDE3NzA3fQ.Iazn9g24gKTMCpbJQ17Wmh-2jES1B7A2VzF4UdktSbw";
+
+async function supaFetch(table, method='GET', body=null, filter='') {
+  const url = SUPA_URL + '/rest/v1/' + table + (filter||'');
+  const opts = {
+    method,
+    headers: {
+      'apikey': SUPA_KEY,
+      'Authorization': 'Bearer ' + SUPA_KEY,
+      'Content-Type': 'application/json',
+      'Prefer': method==='POST' ? 'return=representation' : (method==='PATCH'?'return=representation':''),
+    },
+  };
+  if(body) opts.body = JSON.stringify(body);
+  const r = await fetch(url, opts);
+  if(method==='DELETE') return [];
+  const text = await r.text();
+  return text ? JSON.parse(text) : [];
+}
+
+// ══════════════════════════════════════════════════════
+// STATE (localStorage for settings, Supabase for data)
 // ══════════════════════════════════════════════════════
 const S = {
   get drivers(){ return JSON.parse(localStorage.getItem('dx_drivers')||'["Ishan Thareeq","M. F. Sarwari","Rahman Risvi Mohamed"]') },
   set drivers(v){ localStorage.setItem('dx_drivers',JSON.stringify(v)) },
   get vehicles(){ return JSON.parse(localStorage.getItem('dx_vehicles')||'["OG X553","SWM5448","OG-DX36"]') },
   set vehicles(v){ localStorage.setItem('dx_vehicles',JSON.stringify(v)) },
-  get fahrten(){ return JSON.parse(localStorage.getItem('dx_fahrten')||'[]') },
-  set fahrten(v){ localStorage.setItem('dx_fahrten',JSON.stringify(v)) },
-  get ausgaben(){ return JSON.parse(localStorage.getItem('dx_ausgaben')||'[]') },
-  set ausgaben(v){ localStorage.setItem('dx_ausgaben',JSON.stringify(v)) },
-  get zeiten(){ return JSON.parse(localStorage.getItem('dx_zeiten')||'[]') },
-  set zeiten(v){ localStorage.setItem('dx_zeiten',JSON.stringify(v)) },
+  fahrten: [],
+  ausgaben: [],
+  zeiten: [],
   get activeUser(){ return localStorage.getItem('dx_user')||'' },
   set activeUser(v){ localStorage.setItem('dx_user',v) },
 };
+
+// ══════════════════════════════════════════════════════
+// SUPABASE DATA LOADER
+// ══════════════════════════════════════════════════════
+async function loadAll() {
+  showLoading(true);
+  try {
+    const [fahrten, ausgaben, zeiten] = await Promise.all([
+      supaFetch('fahrten', 'GET', null, '?order=datum.desc'),
+      supaFetch('ausgaben', 'GET', null, '?order=datum.desc'),
+      supaFetch('arbeitszeiten', 'GET', null, '?order=datum.desc'),
+    ]);
+    S.fahrten  = Array.isArray(fahrten)  ? fahrten.map(r=>  ({id:r.id,date:r.datum,driver:r.fahrer,vehicle:r.fahrzeug,from:r.von,to:r.nach,km:r.km,kmStart:r.km_start,kmEnd:r.km_end,cat:r.kategorie,purpose:r.zweck}))  : [];
+    S.ausgaben = Array.isArray(ausgaben) ? ausgaben.map(r=> ({id:r.id,date:r.datum,driver:r.fahrer,amount:r.betrag,pay:r.zahlungsart,cat:r.kategorie,desc:r.beschreibung,beleg:r.beleg,note:r.notiz})) : [];
+    S.zeiten   = Array.isArray(zeiten)   ? zeiten.map(r=>   ({id:r.id,date:r.datum,driver:r.fahrer,start:r.kommen,end:r.gehen,brk:r.pause_min,task:r.taetigkeit,note:r.notiz}))   : [];
+  } catch(e) {
+    console.error('Supabase Ladefehler:', e);
+    const errBox = document.getElementById('supa-error');
+    if(errBox){ errBox.textContent = '⚠️ Verbindungsfehler: ' + e.message; errBox.style.display='block'; }
+    S.fahrten=[]; S.ausgaben=[]; S.zeiten=[];
+  }
+  showLoading(false);
+  renderPage(currentPage);
+}
+
+function showLoading(on) {
+  let el = document.getElementById('loading-bar');
+  if(!el) { el=document.createElement('div'); el.id='loading-bar';
+    el.style.cssText='position:fixed;top:52px;left:0;right:0;height:3px;background:linear-gradient(90deg,#4CAF82,#00BCD4);z-index:999;transition:opacity .3s';
+    document.body.appendChild(el); }
+  el.style.opacity = on?'1':'0';
+}
 
 // ══════════════════════════════════════════════════════
 // UTILS
@@ -793,12 +846,15 @@ function saveFahrt(){
   const cat=document.getElementById('f-cat').value;
   const purpose=document.getElementById('f-purpose').value.trim();
   const editId=document.getElementById('fahrt-edit-id').value;
-  const arr=S.fahrten;
-  if(editId){ const i=arr.findIndex(e=>e.id===editId); if(i>=0) arr[i]={...arr[i],date,driver,vehicle,from,to,km,kmStart,kmEnd,cat,purpose}; }
-  else arr.push({id:uid(),date,driver,vehicle,from,to,km,kmStart,kmEnd,cat,purpose});
-  S.fahrten=arr; closeModal('m-fahrt'); renderPage(currentPage);
+  const entry={id:editId||uid(),date,driver,vehicle,from,to,km,kmStart,kmEnd,cat,purpose};
+  if(editId){
+    await supaFetch('fahrten','PATCH',{datum:date,fahrer:driver,fahrzeug:vehicle,von:from,nach:to,km,km_start:kmStart,km_end:kmEnd,kategorie:cat,zweck:purpose},`?id=eq.${editId}`);
+  } else {
+    await supaFetch('fahrten','POST',{id:entry.id,datum:date,fahrer:driver,fahrzeug:vehicle,von:from,nach:to,km,km_start:kmStart,km_end:kmEnd,kategorie:cat,zweck:purpose});
+  }
+  closeModal('m-fahrt'); await loadAll();
 }
-function deleteFahrt(id){ if(confirm('Eintrag löschen?')){ S.fahrten=S.fahrten.filter(e=>e.id!==id); renderPage(currentPage); } }
+async function deleteFahrt(id){ if(confirm('Eintrag löschen?')){ await supaFetch('fahrten','DELETE',null,`?id=eq.${id}`); await loadAll(); } }
 
 // ══════════════════════════════════════════════════════
 // AUSGABE CRUD
@@ -837,12 +893,15 @@ function saveAusgabe(){
   const beleg=document.getElementById('a-beleg').value.trim();
   const note=document.getElementById('a-note').value.trim();
   const editId=document.getElementById('a-edit-id').value;
-  const arr=S.ausgaben;
-  if(editId){ const i=arr.findIndex(e=>e.id===editId); if(i>=0) arr[i]={...arr[i],date,driver,amount,pay,cat,desc,beleg,note}; }
-  else arr.push({id:uid(),date,driver,amount,pay,cat,desc,beleg,note});
-  S.ausgaben=arr; closeModal('m-ausgabe'); renderPage(currentPage);
+  const entry={id:editId||uid(),date,driver,amount,pay,cat,desc,beleg,note};
+  if(editId){
+    await supaFetch('ausgaben','PATCH',{datum:date,fahrer:driver,betrag:amount,zahlungsart:pay,kategorie:cat,beschreibung:desc,beleg,notiz:note},`?id=eq.${editId}`);
+  } else {
+    await supaFetch('ausgaben','POST',{id:entry.id,datum:date,fahrer:driver,betrag:amount,zahlungsart:pay,kategorie:cat,beschreibung:desc,beleg,notiz:note});
+  }
+  closeModal('m-ausgabe'); await loadAll();
 }
-function deleteAusgabe(id){ if(confirm('Eintrag löschen?')){ S.ausgaben=S.ausgaben.filter(e=>e.id!==id); renderPage(currentPage); } }
+async function deleteAusgabe(id){ if(confirm('Eintrag löschen?')){ await supaFetch('ausgaben','DELETE',null,`?id=eq.${id}`); await loadAll(); } }
 
 // ══════════════════════════════════════════════════════
 // ARBEITSZEIT CRUD + STEMPEL
@@ -851,19 +910,17 @@ function stempelKommen(){
   if(!S.activeUser){ alert('Bitte zuerst deinen Namen unter Einstellungen wählen.'); showPage('settings'); return; }
   const already=S.zeiten.find(e=>e.driver===S.activeUser&&!e.end&&e.date===today());
   if(already){ alert('Du bist bereits eingestempelt!'); return; }
-  const arr=S.zeiten;
-  arr.push({id:uid(),date:today(),driver:S.activeUser,start:nowTime(),end:'',brk:0,task:'',note:''});
-  S.zeiten=arr; renderPage(currentPage);
+  const newId=uid();
+  await supaFetch('arbeitszeiten','POST',{id:newId,datum:today(),fahrer:S.activeUser,kommen:nowTime(),gehen:'',pause_min:0,taetigkeit:'',notiz:''});
+  await loadAll();
 }
 function stempelGehen(){
   if(!S.activeUser){ alert('Bitte zuerst deinen Namen wählen.'); return; }
-  const arr=S.zeiten;
-  const idx=arr.map((e,i)=>({e,i})).reverse().find(({e})=>e.driver===S.activeUser&&!e.end);
-  if(!idx){ alert('Du bist nicht eingestempelt.'); return; }
+  const openEntry=[...S.zeiten].reverse().find(e=>e.driver===S.activeUser&&!e.end);
+  if(!openEntry){ alert('Du bist nicht eingestempelt.'); return; }
   const brk=prompt('Pause in Minuten (0 wenn keine Pause):','30');
-  arr[idx.i].end=nowTime();
-  arr[idx.i].brk=parseInt(brk)||0;
-  S.zeiten=arr; renderPage(currentPage);
+  await supaFetch('arbeitszeiten','PATCH',{gehen:nowTime(),pause_min:parseInt(brk)||0},`?id=eq.${openEntry.id}`);
+  await loadAll();
 }
 function openZeitModal(id){
   fillDriverSel('z-driver', S.activeUser||S.drivers[0]||'');
@@ -895,12 +952,15 @@ function saveZeit(){
   const task=document.getElementById('z-task').value.trim();
   const note=document.getElementById('z-note').value.trim();
   const editId=document.getElementById('z-edit-id').value;
-  const arr=S.zeiten;
-  if(editId){ const i=arr.findIndex(e=>e.id===editId); if(i>=0) arr[i]={...arr[i],date,driver,start,end,brk,task,note}; }
-  else arr.push({id:uid(),date,driver,start,end,brk,task,note});
-  S.zeiten=arr; closeModal('m-zeit'); renderPage(currentPage);
+  const entry={id:editId||uid(),date,driver,start,end,brk,task,note};
+  if(editId){
+    await supaFetch('arbeitszeiten','PATCH',{datum:date,fahrer:driver,kommen:start,gehen:end,pause_min:brk,taetigkeit:task,notiz:note},`?id=eq.${editId}`);
+  } else {
+    await supaFetch('arbeitszeiten','POST',{id:entry.id,datum:date,fahrer:driver,kommen:start,gehen:end,pause_min:brk,taetigkeit:task,notiz:note});
+  }
+  closeModal('m-zeit'); await loadAll();
 }
-function deleteZeit(id){ if(confirm('Eintrag löschen?')){ S.zeiten=S.zeiten.filter(e=>e.id!==id); renderPage(currentPage); } }
+async function deleteZeit(id){ if(confirm('Eintrag löschen?')){ await supaFetch('arbeitszeiten','DELETE',null,`?id=eq.${id}`); await loadAll(); } }
 
 // ══════════════════════════════════════════════════════
 // CSV EXPORT
@@ -934,7 +994,12 @@ function exportCSV(type){
 // BOOT
 // ══════════════════════════════════════════════════════
 document.getElementById('active-user-label').textContent = S.activeUser || 'Nutzer wählen';
-renderPage('dashboard');
+// Add error banner
+const errDiv = document.createElement('div');
+errDiv.id = 'supa-error';
+errDiv.style.cssText = 'display:none;position:fixed;bottom:16px;right:16px;background:#C62828;color:#fff;padding:10px 16px;border-radius:8px;font-size:12px;z-index:9999;max-width:400px';
+document.body.appendChild(errDiv);
+loadAll();
 </script>
 </body>
 </html>
