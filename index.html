@@ -1026,39 +1026,44 @@ async function checkSession(){
 }
 
 function renderDashAuftraege(){
-  const el = document.getElementById('dash-auftraege-body');
+  var el = document.getElementById("dash-auftraege-body");
   if(!el) return;
-  const list = (window._auftraege||[]).slice(0,4);
+  var list = (window._auftraege||[]).slice(0,4);
+  el.innerHTML = "";
   if(!list.length){
-    el.innerHTML = '<div class="empty" style="padding:20px"><div class="ei">📋</div><div>Noch keine Aufträge. <a href="#" onclick="showPage('auftraege')">Ersten Auftrag anlegen</a></div></div>';
+    var empty = document.createElement("div");
+    empty.style.cssText = "text-align:center;padding:20px;color:#666";
+    empty.textContent = "📋 Noch keine Aufträge vorhanden.";
+    el.appendChild(empty);
     return;
   }
-  el.innerHTML = '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px">' +
-    list.map(function(a){
-      var hasKI = !!a.bericht_intern;
-      var preview = hasKI ? a.bericht_intern.slice(0,100) : '';
-      var statusLbl = a.status==='offen'?'Offen':a.status==='in_bearbeitung'?'In Bearb.':'Fertig';
-      return '<div style="border:1px solid var(--border);border-radius:8px;padding:12px;background:var(--surface-1)">' +
-        '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">' +
-          '<span style="font-size:12px;font-weight:600">' + esc(a.auftragsnummer) + '</span>' +
-          '<span class="status-badge status-' + a.status + '">' + statusLbl + '</span>' +
-        '</div>' +
-        '<div style="font-size:11px;color:var(--muted);margin-bottom:3px">' + (a.typ==='reinigung'?'🧹':'🔍') + ' ' + esc(a.kundenname||'–') + ' — ' + esc(a.objekt||'–') + '</div>' +
-        '<div style="font-size:11px;color:var(--muted);margin-bottom:8px">📅 ' + esc(a.datum||'') + ' | 👤 ' + esc(a.mitarbeiter||'–') + '</div>' +
-        (hasKI ?
-          '<div style="background:var(--greenL);border:1px solid var(--greenB);border-radius:6px;padding:6px 8px;font-size:10px;color:var(--greenM);margin-bottom:6px">' +
-            '<strong>🤖 KI-Analyse vorhanden</strong>' +
-            '<div style="margin-top:2px;color:var(--text-secondary);max-height:36px;overflow:hidden">' + esc(preview) + '…</div>' +
-          '</div>' :
-          '<div style="background:var(--amberL);border:1px solid var(--amberB);border-radius:6px;padding:4px 8px;font-size:10px;color:var(--amber);margin-bottom:6px">⚠️ Noch keine KI-Analyse</div>'
-        ) +
-        '<div style="display:flex;gap:5px">' +
-          '<button class="btn btn-blue btn-xs" onclick="berichtBearbeiten('' + a.id + '')">✏️ Bearbeiten</button>' +
-          '<button class="btn btn-green btn-xs" onclick="currentAuftrag=window._auftraege.find(function(x){return x.id==='' + a.id + ''});auftragView='bericht';showPage('auftraege');renderAuftraege()">📄 Bericht</button>' +
-        '</div>' +
-      '</div>';
-    }).join('') +
-  '</div>';
+  var grid = document.createElement("div");
+  grid.style.cssText = "display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px";
+  for(var i=0;i<list.length;i++){
+    var a = list[i];
+    var card = document.createElement("div");
+    card.style.cssText = "border:1px solid var(--border);border-radius:8px;padding:12px;background:var(--surface-1)";
+    var statusLbl = a.status==="offen"?"Offen":a.status==="in_bearbeitung"?"In Bearb.":"Fertig";
+    var typIcon = a.typ==="reinigung"?"🧹":"🔍";
+    var hasKI = !!a.bericht_intern;
+    card.innerHTML = [
+      "<div style='display:flex;align-items:center;justify-content:space-between;margin-bottom:6px'>",
+        "<span style='font-size:12px;font-weight:600'>" + esc(a.auftragsnummer||"") + "</span>",
+        "<span class='status-badge status-" + a.status + "'>" + statusLbl + "</span>",
+      "</div>",
+      "<div style='font-size:11px;color:var(--muted);margin-bottom:3px'>" + typIcon + " " + esc(a.kundenname||"") + " — " + esc(a.objekt||"") + "</div>",
+      "<div style='font-size:11px;color:var(--muted);margin-bottom:8px'>📅 " + esc(a.datum||"") + " | 👤 " + esc(a.mitarbeiter||"") + "</div>",
+      hasKI
+        ? "<div style='background:var(--greenL);border:1px solid var(--greenB);border-radius:6px;padding:6px 8px;font-size:10px;color:var(--greenM);margin-bottom:6px'><strong>🤖 KI-Analyse vorhanden</strong><div style='margin-top:2px;max-height:36px;overflow:hidden'>" + esc((a.bericht_intern||"").slice(0,100)) + "...</div></div>"
+        : "<div style='background:var(--amberL);border:1px solid var(--amberB);border-radius:6px;padding:4px 8px;font-size:10px;color:var(--amber);margin-bottom:6px'>⚠️ Noch keine KI-Analyse</div>",
+      "<div style='display:flex;gap:5px'>",
+        "<button class='btn btn-blue btn-xs' onclick='berichtBearbeiten("" + a.id + "")'>✏️ Bearbeiten</button>",
+        "<button class='btn btn-green btn-xs' onclick='(function(){currentAuftrag=(window._auftraege||[]).find(function(x){return x.id===" + JSON.stringify(a.id) + "});auftragView="bericht";showPage("auftraege");renderAuftraege();})()'>📄 Bericht</button>",
+      "</div>"
+    ].join("");
+    grid.appendChild(card);
+  }
+  el.appendChild(grid);
 }
 
 // Auto-refresh token every 50 minutes
