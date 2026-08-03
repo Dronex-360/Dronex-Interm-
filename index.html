@@ -1208,7 +1208,7 @@ async function renderAuftraege(){
   if(!pg) return;
   if(auftragView==='list'){ renderAuftragList(); return; }
   else if(auftragView==='neu'){ renderAuftragForm(); return; }
-  else if(auftragView==='detail' && currentAuftrag) pg.innerHTML = await renderAuftragDetail();
+  else if(auftragView==='detail' && currentAuftrag){ await renderAuftragDetail(); return; }
   else if(auftragView==='bericht' && currentAuftrag) pg.innerHTML = await renderAuftragBericht();
 }
 
@@ -1514,63 +1514,120 @@ async function deleteAuftrag(id){
 async function renderAuftragDetail(){
   var a = currentAuftrag; if(!a) return '';
   await loadFotos(a.id);
-  var fByPhase = function(phase){ return auftragFotos.filter(function(f){return f.phase===phase;}); };
-  var renderFotos = function(phase,label){
-    var fotos = fByPhase(phase);
-    var cards = fotos.map(function(f){
-      return '<div class="foto-card"><img src="'+f.bild_base64+'" alt="'+esc(f.beschriftung||phase)+'"/><div class="foto-lbl">'+esc(f.beschriftung||phase)+'</div></div>';
-    }).join('');
-    return '<div class="ad-section"><div class="ad-title">'+label+'</div>' +
-      '<div class="foto-grid">'+cards +
-        '<div class="foto-upload-zone" onclick="document.getElementById('fup-'+phase+'').click()">' +
-          '<div style="font-size:24px;margin-bottom:4px">📷</div><div>Foto hinzufügen</div>' +
-        '</div>' +
-      '</div>' +
-      '<input type="file" id="fup-'+phase+'" accept="image/*" multiple style="display:none" onchange="uploadFotos(''+a.id+'',''+phase+'',this)"/>' +
-    '</div>';
-  };
-  return '<div style="padding:14px">' +
-    '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px">' +
-      '<div style="display:flex;align-items:center;gap:10px">' +
-        '<button class="btn btn-grey btn-sm" onclick="auftragView='list';renderAuftraege()">← Zurück</button>' +
-        '<h2 style="font-size:15px;font-weight:700;color:var(--grey)">'+esc(a.auftragsnummer)+' — '+(a.typ==='reinigung'?'🧹 Reinigung':'🔍 Inspektion')+'</h2>' +
-        '<span class="status-badge status-'+a.status+'">'+(a.status==='offen'?'Offen':a.status==='in_bearbeitung'?'In Bearbeitung':'Abgeschlossen')+'</span>' +
-      '</div>' +
-      '<div style="display:flex;gap:6px;flex-wrap:wrap">' +
-        '<button class="btn btn-grey btn-sm" onclick="currentAuftrag=auftraege.find(function(x){return x.id===''+a.id+'';});auftragView='neu';renderAuftragForm(currentAuftrag)">✏️ Bearbeiten</button>' +
-        '<button class="btn btn-blue btn-sm" onclick="kiAnalyse(''+a.id+'',this)">🤖 KI-Analyse</button>' +
-        '<button class="btn btn-green btn-sm" onclick="auftragView='bericht';renderAuftraege()">📄 Bericht</button>' +
-        '<button class="btn btn-red btn-sm" onclick="deleteAuftrag(''+a.id+'')">× Löschen</button>' +
-      '</div>' +
-    '</div>' +
-    '<div class="g2">' +
-      '<div class="auftrag-detail">' +
-        '<div class="ad-section"><div class="ad-title">Auftragsdaten</div>' +
-          [['Auftragsnummer',a.auftragsnummer],['Datum',a.datum],['Mitarbeiter',a.mitarbeiter],['Typ',a.typ==='reinigung'?'Reinigung':'Inspektion']].map(function(r){return '<div style="display:flex;justify-content:space-between;font-size:12px;padding:3px 0;border-bottom:1px solid var(--border)"><span style="color:var(--muted)">'+r[0]+'</span><span style="font-weight:500">'+esc(r[1]||'–')+'</span></div>';}).join('') +
-        '</div>' +
-        '<div class="ad-section"><div class="ad-title">Kundendaten</div>' +
-          [['Kunde',a.kundenname],['Objekt',a.objekt],['Adresse',a.adresse],['GPS',a.gps],['Ansprechpartner',a.ansprechpartner],['Telefon',a.telefon]].map(function(r){return '<div style="display:flex;justify-content:space-between;font-size:12px;padding:3px 0;border-bottom:1px solid var(--border)"><span style="color:var(--muted)">'+r[0]+'</span><span style="font-weight:500;text-align:right;max-width:60%">'+esc(r[1]||'–')+'</span></div>';}).join('') +
-        '</div>' +
-      '</div>' +
-      '<div class="auftrag-detail">' +
-        '<div class="ad-section"><div class="ad-title">Beschreibung</div><div style="font-size:12px;line-height:1.6">'+esc(a.beschreibung||'–')+'</div></div>' +
-        '<div class="ad-section"><div class="ad-title">🛡 Sicherheitskonzept</div><div style="font-size:11px;color:var(--greenM)">✓ Standard DroneX360-Sicherheitskonzept (EU-VO 2019/947) wird automatisch in den Bericht eingefügt.</div>'+(a.sicherheitskonzept?'<div style="font-size:11px;color:var(--muted);margin-top:4px">'+esc(a.sicherheitskonzept)+'</div>':'')+'</div>' +
-        '<div class="ad-section"><div class="ad-title">Befunde / Notizen</div>' +
-          '<textarea id="befunde-input" style="width:100%;border:1px solid var(--border);border-radius:6px;padding:6px 8px;font-size:12px;background:var(--surface-0);color:var(--text-primary);min-height:80px;resize:vertical">'+esc(a.befunde||'')+'</textarea>' +
-          '<div class="ad-title" style="margin-top:8px">Maßnahmen / Empfehlungen</div>' +
-          '<textarea id="massnahmen-input" style="width:100%;border:1px solid var(--border);border-radius:6px;padding:6px 8px;font-size:12px;background:var(--surface-0);color:var(--text-primary);min-height:60px;resize:vertical">'+esc(a.massnahmen||'')+'</textarea>' +
-          '<button class="btn btn-green btn-sm" style="margin-top:6px" onclick="saveBefunde(''+a.id+'')">Speichern</button>' +
-        '</div>' +
-        (a.bericht_intern?'<div class="ad-section"><div class="ad-title">🤖 KI-Analyse Ergebnis</div><div class="ki-result">'+esc(a.bericht_intern)+'</div></div>':'') +
-      '</div>' +
-    '</div>' +
-    renderFotos('vorher','📷 Vorher-Fotos') +
-    (a.typ==='inspektion'?renderFotos('befund','🔍 Befund-Fotos'):'') +
-    renderFotos('nachher','✅ Nachher-Fotos') +
-  '</div>';
-}
+  var pg = document.getElementById('page-auftraege');
+  if(!pg) return '';
+  pg.innerHTML = '';
 
-function triggerFotoUpload(auftragId,phase){ document.getElementById('fup-'+phase).click(); }
+  // Header
+  var hdr = document.createElement('div');
+  hdr.style.cssText = 'display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px';
+  var hdrLeft = document.createElement('div');
+  hdrLeft.style.cssText = 'display:flex;align-items:center;gap:10px';
+  var backBtn = document.createElement('button');
+  backBtn.className='btn btn-grey btn-sm'; backBtn.textContent='← Zurück';
+  backBtn.onclick=function(){ auftragView='list'; renderAuftraege(); };
+  var ttl = document.createElement('h2');
+  ttl.style.cssText='font-size:15px;font-weight:700;color:var(--grey)';
+  ttl.textContent = esc(a.auftragsnummer)+' — '+(a.typ==='reinigung'?'🧹 Reinigung':'🔍 Inspektion');
+  var statusBadge = document.createElement('span');
+  statusBadge.className='status-badge status-'+a.status;
+  statusBadge.textContent=a.status==='offen'?'Offen':a.status==='in_bearbeitung'?'In Bearbeitung':'Abgeschlossen';
+  hdrLeft.appendChild(backBtn); hdrLeft.appendChild(ttl); hdrLeft.appendChild(statusBadge);
+
+  var hdrRight = document.createElement('div');
+  hdrRight.style.cssText='display:flex;gap:6px;flex-wrap:wrap';
+  var editBtn=document.createElement('button');editBtn.className='btn btn-grey btn-sm';editBtn.textContent='✏️ Bearbeiten';
+  (function(aa){ editBtn.onclick=function(){ currentAuftrag=aa; renderAuftragForm(aa); }; })(a);
+  var kiBtn=document.createElement('button');kiBtn.className='btn btn-blue btn-sm';kiBtn.textContent='🤖 KI-Analyse';
+  (function(id,btn){ kiBtn.onclick=function(){ kiAnalyse(id,kiBtn); }; })(a.id,kiBtn);
+  var reportBtn=document.createElement('button');reportBtn.className='btn btn-green btn-sm';reportBtn.textContent='📄 Bericht';
+  reportBtn.onclick=function(){ auftragView='bericht'; renderAuftraege(); };
+  var delBtn=document.createElement('button');delBtn.className='btn btn-red btn-sm';delBtn.textContent='× Löschen';
+  (function(id){ delBtn.onclick=function(){ deleteAuftrag(id); }; })(a.id);
+  hdrRight.appendChild(editBtn);hdrRight.appendChild(kiBtn);hdrRight.appendChild(reportBtn);hdrRight.appendChild(delBtn);
+  hdr.appendChild(hdrLeft);hdr.appendChild(hdrRight);
+  pg.appendChild(hdr);
+
+  // Info grid
+  var grid=document.createElement('div');grid.className='g2';
+  
+  // Left card
+  var leftCard=document.createElement('div');leftCard.className='auftrag-detail';
+  function infoSection(title, pairs){
+    var sec=document.createElement('div');sec.className='ad-section';
+    var t=document.createElement('div');t.className='ad-title';t.textContent=title;sec.appendChild(t);
+    pairs.forEach(function(p){
+      var row=document.createElement('div');
+      row.style.cssText='display:flex;justify-content:space-between;font-size:12px;padding:3px 0;border-bottom:1px solid var(--border)';
+      var lbl=document.createElement('span');lbl.style.color='var(--muted)';lbl.textContent=p[0];
+      var val=document.createElement('span');val.style.cssText='font-weight:500;text-align:right;max-width:60%';val.textContent=p[1]||'–';
+      row.appendChild(lbl);row.appendChild(val);sec.appendChild(row);
+    });
+    return sec;
+  }
+  leftCard.appendChild(infoSection('Auftragsdaten',[['Auftragsnummer',a.auftragsnummer],['Datum',a.datum],['Mitarbeiter',a.mitarbeiter],['Typ',a.typ==='reinigung'?'Reinigung':'Inspektion']]));
+  leftCard.appendChild(infoSection('Kundendaten',[['Kunde',a.kundenname],['Objekt',a.objekt],['Adresse',a.adresse],['GPS',a.gps],['Ansprechpartner',a.ansprechpartner],['Telefon',a.telefon]]));
+  grid.appendChild(leftCard);
+
+  // Right card
+  var rightCard=document.createElement('div');rightCard.className='auftrag-detail';
+  var descSec=document.createElement('div');descSec.className='ad-section';
+  var descT=document.createElement('div');descT.className='ad-title';descT.textContent='Beschreibung';
+  var descP=document.createElement('div');descP.style.cssText='font-size:12px;line-height:1.6';descP.textContent=a.beschreibung||'–';
+  descSec.appendChild(descT);descSec.appendChild(descP);rightCard.appendChild(descSec);
+
+  var sicherSec=document.createElement('div');sicherSec.className='ad-section';
+  var sicherT=document.createElement('div');sicherT.className='ad-title';sicherT.textContent='🛡 Sicherheitskonzept';
+  var sicherNote=document.createElement('div');sicherNote.style.cssText='font-size:11px;color:var(--greenM)';sicherNote.textContent='✓ Standard DroneX360-Sicherheitskonzept wird automatisch eingefügt.';
+  sicherSec.appendChild(sicherT);sicherSec.appendChild(sicherNote);rightCard.appendChild(sicherSec);
+
+  var befundSec=document.createElement('div');befundSec.className='ad-section';
+  var befundT=document.createElement('div');befundT.className='ad-title';befundT.textContent='Befunde / Notizen';
+  var befundTA=document.createElement('textarea');befundTA.id='befunde-input';befundTA.style.cssText='width:100%;border:1px solid var(--border);border-radius:6px;padding:6px 8px;font-size:12px;background:var(--surface0);color:var(--text);min-height:80px;resize:vertical';befundTA.value=a.befunde||'';
+  var massT=document.createElement('div');massT.className='ad-title';massT.style.marginTop='8px';massT.textContent='Maßnahmen / Empfehlungen';
+  var massTA=document.createElement('textarea');massTA.id='massnahmen-input';massTA.style.cssText='width:100%;border:1px solid var(--border);border-radius:6px;padding:6px 8px;font-size:12px;background:var(--surface0);color:var(--text);min-height:60px;resize:vertical';massTA.value=a.massnahmen||'';
+  var saveBtn2=document.createElement('button');saveBtn2.className='btn btn-green btn-sm';saveBtn2.style.marginTop='6px';saveBtn2.textContent='Speichern';
+  (function(id){saveBtn2.onclick=function(){saveBefunde(id);};})(a.id);
+  befundSec.appendChild(befundT);befundSec.appendChild(befundTA);befundSec.appendChild(massT);befundSec.appendChild(massTA);befundSec.appendChild(saveBtn2);
+  rightCard.appendChild(befundSec);
+
+  if(a.bericht_intern){
+    var kiSec=document.createElement('div');kiSec.className='ad-section';
+    var kiT=document.createElement('div');kiT.className='ad-title';kiT.textContent='🤖 KI-Analyse Ergebnis';
+    var kiBox=document.createElement('div');kiBox.className='ki-result';kiBox.textContent=a.bericht_intern;
+    kiSec.appendChild(kiT);kiSec.appendChild(kiBox);rightCard.appendChild(kiSec);
+  }
+  grid.appendChild(rightCard);
+  pg.appendChild(grid);
+
+  // Foto sections
+  function makeFotoSection(phase, label){
+    var fotos=auftragFotos.filter(function(f){return f.phase===phase;});
+    var sec=document.createElement('div');sec.className='ad-section';
+    var t=document.createElement('div');t.className='ad-title';t.textContent=label;sec.appendChild(t);
+    var fgrid=document.createElement('div');fgrid.className='foto-grid';
+    fotos.forEach(function(f){
+      var card=document.createElement('div');card.className='foto-card';
+      var img=document.createElement('img');img.src=f.bild_base64;img.alt=esc(f.beschriftung||phase);img.style.cssText='width:100%;height:100px;object-fit:cover;display:block';
+      var lbl=document.createElement('div');lbl.className='foto-lbl';lbl.textContent=f.beschriftung||phase;
+      card.appendChild(img);card.appendChild(lbl);fgrid.appendChild(card);
+    });
+    var zone=document.createElement('div');zone.className='foto-upload-zone';
+    zone.innerHTML='<div style="font-size:24px;margin-bottom:4px">📷</div><div>Foto hinzufügen</div>';
+    var fileInput=document.createElement('input');
+    fileInput.type='file';fileInput.accept='image/*';fileInput.multiple=true;fileInput.style.display='none';
+    fileInput.id='fup-'+phase;
+    zone.onclick=function(){fileInput.click();};
+    (function(aid,ph,inp){ inp.onchange=function(){uploadFotos(aid,ph,inp);}; })(a.id,phase,fileInput);
+    fgrid.appendChild(zone);fgrid.appendChild(fileInput);
+    sec.appendChild(fgrid);
+    pg.appendChild(sec);
+  }
+  makeFotoSection('vorher','📷 Vorher-Fotos');
+  if(a.typ==='inspektion') makeFotoSection('befund','🔍 Befund-Fotos');
+  makeFotoSection('nachher','✅ Nachher-Fotos');
+  return '';
+}
 
 async function uploadFotos(auftragId,phase,input){
   var files = Array.from(input.files);
