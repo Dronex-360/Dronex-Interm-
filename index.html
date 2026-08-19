@@ -1416,10 +1416,10 @@ function bRender() {
       html += '<div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">';
       html += '<input type="text" value="'+bEsc(item.label)+'" data-typ="fix" data-gi="'+gi+'" data-ii="'+ii+'" data-field="label" onchange="bOnChange(this)" style="flex:2;border:1px solid var(--border);border-radius:6px;padding:4px 8px;font-size:11px;background:var(--s2);color:var(--text);outline:none"/>';
       html += '<input type="number" value="'+(parseFloat(item.val)||0).toFixed(2)+'" data-typ="fix" data-gi="'+gi+'" data-ii="'+ii+'" data-field="val" onchange="bOnChange(this)" style="flex:1;border:1px solid var(--border);border-radius:6px;padding:4px 8px;font-size:11px;background:var(--s2);color:var(--text);outline:none;text-align:right"/>';
-      html += '<button onclick="bDelItem(this)" data-typ="fix" data-gi="+gi+" data-ii="+ii+" style="background:var(--redL);border:1px solid var(--redB);color:var(--red);border-radius:5px;padding:2px 7px;cursor:pointer;font-size:11px;flex-shrink:0">×</button>';
+      html += '<button onclick="bDelItem(this)" data-typ="fix" data-gi="'+gi+'" data-ii="'+ii+'" style="background:var(--redL);border:1px solid var(--redB);color:var(--red);border-radius:5px;padding:2px 7px;cursor:pointer;font-size:11px;flex-shrink:0">×</button>';
       html += '</div>';
     });
-    html += '<button onclick="bAddItem(this)" data-typ="fix" data-gi="+gi+" style="background:var(--greenL);border:1px solid var(--greenB);color:var(--greenM);border-radius:6px;padding:4px 10px;font-size:11px;cursor:pointer;width:100%">+ Posten hinzufügen</button>';
+    html += '<button onclick="bAddItem(this)" data-typ="fix" data-gi="'+gi+'" style="background:var(--greenL);border:1px solid var(--greenB);color:var(--greenM);border-radius:6px;padding:4px 10px;font-size:11px;cursor:pointer;width:100%">+ Posten hinzufügen</button>';
     html += '</div>';
   });
   html += '</div>';
@@ -1508,7 +1508,7 @@ async function bOnChange(inp) {
   bRender();
 }
 
-async function bAddItem(el) { const typ=el.dataset.typ; const gi=parseInt(el.dataset.gi)||0;
+async function bAddItem(el) { const typ=el.dataset.typ; const gi=parseInt(el.dataset.gi);
   const monat = B_MONTHS[bTab];
   const d = bState[bTab];
   const label = typ==='inc' ? 'Neue Einnahme' : 'Neuer Posten';
